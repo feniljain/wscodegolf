@@ -16,26 +16,57 @@ func main() {
 func directSocket() {
 	httpInitMsg := fmt.Sprintf("GET /echo HTTP/1.1\r\nHost: localhost.com:8080\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nConnection: keep-alive, Upgrade\r\nSec-Fetch-Mode: websocket\r\n\r\n")
 
-	// FIXME: we are talking about bytes here and not bits
-	// so convert everything to use bytes
-	_ = []byte{
-		0,          // FIN
-		0,          // RSV1
-		0,          // RSV2
-		0,          // RSV3
-		0, 0, 0, 1, // OpCode
-		1,                   // Mask // Compulsary for client to set
-		0, 0, 0, 0, 1, 0, 0, // Payload Len
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 16 zeroes for extended length
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 64 zeroes for extended length continued
-		0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 0, 0, 0,
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 32 bits for mask
+	//       0                   1                   2                   3
+	//  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+	// +-+-+-+-+-------+-+-------------+-------------------------------+
+	// |F|R|R|R| opcode|M| Payload len |    Extended payload length    |
+	// |I|S|S|S|  (4)  |A|     (7)     |             (16/64)           |
+	// |N|V|V|V|       |S|             |   (if payload len==126/127)   |
+	// | |1|2|3|       |K|             |                               |
+	// +-+-+-+-+-------+-+-------------+ - - - - - - - - - - - - - - - +
+	// |     Extended payload length continued, if payload len == 127  |
+	// + - - - - - - - - - - - - - - - +-------------------------------+
+	// |                               |Masking-key, if MASK set to 1  |
+	// +-------------------------------+-------------------------------+
+	// | Masking-key (continued)       |          Payload Data         |
+	// +-------------------------------- - - - - - - - - - - - - - - - +
+	// :                     Payload Data continued ...                :
+	// + - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - +
+	// |                     Payload Data continued ...                |
+	// +---------------------------------------------------------------+
 
+	wsMsg := []byte{
+		0b00000001, // FIN, RSV1, RSV2, RSV3, OpCode
+		0b10000101, // Mask (Compulsary for client to set) + Payload
+		// 0b00001011,
+		0b00000000,
+		0b00000000, // 2 bytes for extended length
+		0b00000000,
+		0b00000000,
+		0b00000000,
+		0b00000000,
+		0b00000000,
+		0b00000000,
+		0b00000000,
+		0b00000000, // 8 bytes for extended length continued
+		0b00000001,
+		0b00000010,
+		0b00000011,
+		0b00000100, // Mask
+		0b01101001,
+		0b01100111,
+		0b01101111,
+		0b01101000,
+		0b01101110, // Payload
 	}
+
+	const maskBit = 1 << 7
+	a := wsMsg[1] & maskBit
+	fmt.Println("maskBit:", a != 0)
+	// How do tf does this work here: https://github.com/gorilla/websocket/blob/main/conn.go#L830 ??
+
+	// [104, 101, 108, 108, 111]
+	// After mask: [105, 103, 111, 104, 110]
 
 	// Listen for incoming connections
 	conn, err := net.Dial("tcp", "localhost:8080")
@@ -63,6 +94,12 @@ func directSocket() {
 	n, err := conn.Read(buf)
 	if err != nil {
 		fmt.Println("err:", err)
+		return
+	}
+
+	_, err = conn.Write(wsMsg)
+	if err != nil {
+		fmt.Println("Error:", err)
 		return
 	}
 
@@ -151,6 +188,10 @@ Firefox Sent headers:
 // https://github.com/gobwas/ws
 // https://github.com/tinygo-org/awesome-tinygo
 // https://okanexe.medium.com/the-complete-guide-to-tcp-ip-connections-in-golang-1216dae27b5a
+// https://www.openmymind.net/WebSocket-Framing-Masking-Fragmentation-and-More/
+// https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API/Writing_WebSocket_servers
+// https://tinygo.org/docs/guides/optimizing-binaries/
+// https://totallygamerjet.hashnode.dev/the-smallest-go-binary-5kb
 
 // Attempt 1:
 // go build  -ldflags="-s -w" main.go
