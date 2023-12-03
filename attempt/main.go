@@ -14,7 +14,8 @@ func main() {
 }
 
 func directSocket() {
-	httpInitMsg := fmt.Sprintf("GET /echo HTTP/1.1\r\nHost: localhost.com:8080\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nConnection: keep-alive, Upgrade\r\nSec-Fetch-Mode: websocket\r\n\r\n")
+	// Most probs only Connection: upgrade, Upgrade: websocket and Sec-WebSocket-Version: 13 headers are needed
+	httpInitMsg := "GET /echo HTTP/1.1\r\nHost: localhost.com:8080\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nConnection: keep-alive, Upgrade\r\nSec-Fetch-Mode: websocket\r\n\r\n"
 
 	//       0                   1                   2                   3
 	//  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -36,19 +37,10 @@ func directSocket() {
 	// +---------------------------------------------------------------+
 
 	wsMsg := []byte{
-		0b00000001, // FIN, RSV1, RSV2, RSV3, OpCode
-		0b10000101, // Mask (Compulsary for client to set) + Payload
-		// 0b00001011,
-		0b00000000,
-		0b00000000, // 2 bytes for extended length
-		0b00000000,
-		0b00000000,
-		0b00000000,
-		0b00000000,
-		0b00000000,
-		0b00000000,
-		0b00000000,
-		0b00000000, // 8 bytes for extended length continued
+		0b10000001, // FIN, RSV1, RSV2, RSV3, OpCode
+		0b10000101, // Mask Bit (Compulsary for client to set) + Payload
+		// NOTE: We don't need to set extended payload bits if our
+		// msg is less than 126 length
 		0b00000001,
 		0b00000010,
 		0b00000011,
@@ -59,11 +51,6 @@ func directSocket() {
 		0b01101000,
 		0b01101110, // Payload
 	}
-
-	const maskBit = 1 << 7
-	a := wsMsg[1] & maskBit
-	fmt.Println("maskBit:", a != 0)
-	// How do tf does this work here: https://github.com/gorilla/websocket/blob/main/conn.go#L830 ??
 
 	// [104, 101, 108, 108, 111]
 	// After mask: [105, 103, 111, 104, 110]
@@ -103,7 +90,20 @@ func directSocket() {
 		return
 	}
 
-	fmt.Println("Received data:", string(buf[:n]))
+	buf = make([]byte, 1024)
+	n, err = conn.Read(buf)
+	if err != nil {
+		fmt.Println("err:", err)
+		return
+	}
+
+	// for _, byt := range buf {
+	// 	if byt&1 != 0 {
+	// 		fmt.Printf("%08b\n", byt)
+	// 	}
+	// }
+
+	fmt.Println("Received data:", string(buf[2:n]))
 }
 
 func wsEasiest() {
@@ -192,6 +192,7 @@ Firefox Sent headers:
 // https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API/Writing_WebSocket_servers
 // https://tinygo.org/docs/guides/optimizing-binaries/
 // https://totallygamerjet.hashnode.dev/the-smallest-go-binary-5kb
+// https://github.com/pusher/websockets-from-scratch-tutorial/blob/master/README.md
 
 // Attempt 1:
 // go build  -ldflags="-s -w" main.go
