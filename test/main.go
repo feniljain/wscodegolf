@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"syscall"
 )
 
@@ -21,7 +20,7 @@ func main() {
 		0b01101000,
 		0b01101110, // Payload
 	}
-	var response []byte
+	var response [135]byte
 
 	sockfd, _ := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, 0)
 
@@ -32,38 +31,15 @@ func main() {
 
 	syscall.Connect(sockfd, serverAddr)
 
-	fmt.Println("connected!")
+	syscall.Sendmsg(sockfd, []byte("GET /echo HTTP/1.1\r\nHost: localhost.com:8080\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"), nil, serverAddr, 0)
 
-	err := syscall.Sendto(sockfd, []byte("GET /echo HTTP/1.1\r\nHost: localhost.com:8080\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"), 0, nil)
-	// err := syscall.Sendmsg(sockfd, []byte("GET /echo HTTP/1.1\r\nHost: localhost.com:8080\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"), nil, serverAddr, syscall.MSG_DONTWAIT)
-	if err != nil {
-		panic(err)
-	}
+	syscall.Recvfrom(sockfd, response[:], 0)
 
-	fmt.Println("http msg sent!")
+	syscall.Sendto(sockfd, packet, 0, nil)
 
-	data := []byte{}
-	_, _, err = syscall.Recvfrom(sockfd, response, 0)
-	if err != nil {
-		panic(err)
-	}
+	syscall.Recvfrom(sockfd, response[:], 0)
 
-	fmt.Println("msg read!", data)
+	syscall.Close(sockfd)
 
-	err = syscall.Sendto(sockfd, packet, 0, nil)
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Println("ws read!")
-
-	_, _, err = syscall.Recvfrom(sockfd, response, 0)
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Println("ws resp read!")
-
-	fmt.Println("resp:", response)
-	syscall.Write(1, response)
+	syscall.Write(1, response[2:6])
 }
