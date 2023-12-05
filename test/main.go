@@ -1,16 +1,27 @@
 package main
 
 import (
+	"unsafe"
 	"syscall"
 )
 
+// Will only work on linux arm64 systems
 func main() {
-	sockfd, _ := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, 0)
+	r0, _, _ := syscall.RawSyscall(0xc6, 0x2, 0x1, 0x0)
+	sockfd := int(r0)
 
-	syscall.Connect(sockfd, &syscall.SockaddrInet4{
-		Port: 8080,
-		Addr: [4]byte{127, 0, 0, 1},
-	})
+	// 0xcb = 203
+	// 0x20 = 32
+	sockAddr := syscall.SockaddrInet4{Port: 8080, Addr: [4]byte{127, 0, 0, 1}}
+	_, _, err := syscall.RawSyscall(0xcb, r0, uintptr(unsafe.Pointer(&sockAddr)), 0x20)
+	if err != 0 {
+		panic(err)
+	}
+
+	// syscall.Connect(sockfd, &syscall.SockaddrInet4{
+	// 	Port: 8080,
+	// 	Addr: [4]byte{127, 0, 0, 1},
+	// })
 
 	syscall.Sendto(sockfd, []byte("GET /echo HTTP/1.1\r\nHost: localhost.com:8080\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"), 0, nil)
 

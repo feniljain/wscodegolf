@@ -198,6 +198,7 @@ Firefox Sent headers:
 // https://tinygo.org/docs/guides/optimizing-binaries/
 // https://totallygamerjet.hashnode.dev/the-smallest-go-binary-5kb
 // https://github.com/pusher/websockets-from-scratch-tutorial/blob/master/README.md
+// https://github.com/rupran/shrinkelf
 
 // Attempt 1:
 // go build  -ldflags="-s -w" main.go
