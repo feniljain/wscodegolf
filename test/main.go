@@ -5,31 +5,10 @@ import (
 	"unsafe"
 )
 
-// Will only work on linux arm64 systems
-// https://chromium.googlesource.com/chromiumos/docs/+/master/constants/syscalls.md#arm64-64_bit
-func main() {
-	// 0xc6 = 198, socket
-	r0, _, _ := syscall.RawSyscall(0xc6, 0x2, 0x1, 0x0)
+var (
+	httpInitMsg = []byte("GET /echo HTTP/1.1\r\nHost: localhost.com:8080\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\nConnection: keep-alive, Upgrade\r\nSec-Fetch-Mode: websocket\r\n\r\n")
 
-	// https://github.com/bminor/musl/blob/f314e133929b6379eccc632bef32eaebb66a7335/include/netinet/in.h#L16-L21
-	structaddr := [16]byte{
-		// 2 << 0 | 0 << 8
-		0b00000010,
-		0b00000000, // AF_INET
-		0b00011111,
-		0b10010000, // 8080
-		// addr - 127.0.0.1, 32 bits
-		// 127 << 0 | 0 << 8 | 0 << 16 | 1 << 24
-		0b01111111,
-		0b00000000,
-		0b00000000,
-		0b00000001,
-		// 64 bits of padding
-		0b00000000, 0b00000000, 0b00000000, 0b00000000,
-		0b00000000, 0b00000000, 0b00000000, 0b00000000,
-	}
-
-	wsPacket := []byte{
+	packet = []byte{
 		0b10000001, // FIN, RSV1, RSV2, RSV3, OpCode
 		0b10000101, // Mask Bit (Compulsary for client to set) + Payload
 		// NOTE: We don't need to set extended payload bits if our
@@ -45,24 +24,54 @@ func main() {
 		0b01101110, // Payload
 	}
 
-	// 0xcb = 203, connect
-	_, _, err := syscall.RawSyscall(0xcb, r0, uintptr(unsafe.Pointer(&structaddr[0])), uintptr(len(structaddr)))
-	if err != 0 {
-		panic(err)
+	sockaddr = [16]byte{
+		// family - AF_INET (0x2), padded to 16 bits
+		0b00000010,
+		0b00000000,
+		// port - 8080, padded to 16 bits
+		0b00011111,
+		0b10010000,
+		// addr - 127.0.0.1, 32 bits
+		// 127 << 0 | 0 << 8 | 0 << 16 | 1 << 24
+		0b01111111,
+		0b00000000,
+		0b00000000,
+		0b00000001,
+		// 64 bits of padding
+		0b00000000, 0b00000000, 0b00000000, 0b00000000,
+		0b00000000, 0b00000000, 0b00000000, 0b00000000,
 	}
 
-	httpInitMsg := []byte("GET /echo HTTP/1.1\r\nHost: localhost.com:8080\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n")
-	// 0xce = 206, sendto
-	syscall.RawSyscall6(0xce, r0, uintptr(unsafe.Pointer(&httpInitMsg[0])), uintptr(len(httpInitMsg)), 0, 0, 0)
+	response [1024]byte
+)
 
-	// 0xcf = 207, recvfrom
-	var response [135]byte
-	syscall.RawSyscall6(0xcf, r0, uintptr(unsafe.Pointer(&response[0])), uintptr(len(response)), 0, 0, 0)
+//go:linkname alloc runtime.alloc
+func alloc(size uintptr, layout unsafe.Pointer) unsafe.Pointer {
+	return nil
+}
 
-	syscall.RawSyscall6(0xce, r0, uintptr(unsafe.Pointer(&wsPacket[0])), uintptr(len(wsPacket)), 0, 0, 0)
+func main() {	
+	// __NR_socket, AF_INET, SOCK_STREAM
+	var sock, _, _ = syscall.Syscall(41, 0x2, 0x1, 0)
 
-	syscall.RawSyscall6(0xcf, r0, uintptr(unsafe.Pointer(&response[0])), uintptr(len(response)), 0, 0, 0)
+	// __NR_connect, fd, sockaddr_in, len(sockaddr_in)
+	syscall.Syscall6(42, sock, uintptr(unsafe.Pointer(&sockaddr[0])), uintptr(len(sockaddr)), 0, 0, 0)
 
-	// 0x40 = 64, write
-	syscall.RawSyscall(0x40, 1, uintptr(unsafe.Pointer(&response[0])), uintptr(len(response)))
+	// __NR_sendto, fd, buf, len(buf), flags, addr, addr_len
+	syscall.Syscall6(44, sock, uintptr(unsafe.Pointer(&httpInitMsg[0])), uintptr(len(httpInitMsg)), 0, 0, 0)
+
+	// __NR_recvfrom, fd, buf, len(buf), flags, addr, addr_len
+	var n, _, _ = syscall.Syscall6(45, sock, uintptr(unsafe.Pointer(&response[0])), uintptr(len(response)), 0, 0, 0)
+
+	// __NR_sendto
+	syscall.Syscall6(44, sock, uintptr(unsafe.Pointer(&packet[0])), uintptr(len(packet)), 0, 0, 0)
+
+	// __NR_recvfrom
+	syscall.Syscall6(45, sock, uintptr(unsafe.Pointer(&response[n])), uintptr(len(response))-n, 0, 0, 0)
+
+	// __NR_close
+	syscall.Syscall(3, sock, 0, 0)
+
+	// __NR_write, STDOUT_FILENO
+	syscall.Syscall(1, 1, uintptr(unsafe.Pointer(&response[0])), uintptr(len(response)))
 }
