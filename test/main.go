@@ -50,6 +50,8 @@ func alloc(size uintptr, layout unsafe.Pointer) unsafe.Pointer {
 	return nil
 }
 
+//go:section .text_noalign
+//export actual_main
 func main() {	
 	// __NR_socket, AF_INET, SOCK_STREAM
 	var sock, _, _ = syscall.Syscall(359, 0x2, 0x1, 0)

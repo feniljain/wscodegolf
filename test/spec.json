@@ -15,6 +15,7 @@
         "--strip-all",
         "--no-rosegment",
         "-znorelro",
-        "-znognustack"
+        "-znognustack",
+        "-entry=actual_main"
     ]
 }
