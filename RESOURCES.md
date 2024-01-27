@@ -1,0 +1,5 @@
+- https://totallygamerjet.hashnode.dev/the-smallest-go-binary-5kb
+- https://github.com/rupran/shrinkelf
+- https://github.com/xaionaro/documentation/blob/master/golang/reduce-binary-size.md
+- https://github.com/xaionaro-go/tinyhelloworld
+- https://maskray.me/blog/2021-02-28-linker-garbage-collection
